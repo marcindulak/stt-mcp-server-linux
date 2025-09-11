@@ -24,6 +24,32 @@ RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-ins
     python3-urllib3 \
     python3-websockets
 
+# Install whisper dependencies
+RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+    python3-charset-normalizer \
+    python3-filelock \
+    python3-fsspec \
+    python3-jinja2 \
+    python3-llvmlite \
+    python3-markupsafe \
+    python3-more-itertools \
+    python3-mpmath \
+    python3-networkx \
+    python3-numba \
+    python3-numpy \
+    python3-regex \
+    python3-requests \
+    python3-setuptools \
+    python3-sympy \
+    python3-typing-extensions
+
+# Install pytest dependencies
+RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+    python3-iniconfig \
+    python3-pluggy \
+    python3-pygments \
+    python3-pytest
+
 # Set the UID/GID of the user:group to the IDs of the user using this Dockerfile
 ARG USER=nonroot
 ARG GROUP=nonroot
@@ -67,12 +93,16 @@ RUN id
 
 COPY requirements.txt .
 RUN cd /home/${USER} && python3 -m venv --system-site-packages venv && . venv/bin/activate
+# Debian's python3-torch is slow
 # Use two step installation as a workaround to install cpu-only torch
 # See https://github.com/huggingface/transformers/issues/39780
 RUN . /home/${USER}/venv/bin/activate && python -m pip install torch==2.* --index-url https://download.pytorch.org/whl/cpu
 RUN . /home/${USER}/venv/bin/activate && python -m pip install -r requirements.txt
 RUN echo "if [ -f /home/${USER}/venv/bin/activate  ]; then . /home/${USER}/venv/bin/activate; fi" >> /home/${USER}/.bashrc
 COPY stt_mcp_server_linux.py .
+
+# Avoid overloading the system with too many openblas threads
+ENV OPENBLAS_NUM_THREADS=1
 
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
     CMD pgrep -f "stt_mcp_server_linux.py" || exit 1
