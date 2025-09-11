@@ -1,0 +1,4 @@
+openai-whisper
+pytest
+sounddevice
+vosk

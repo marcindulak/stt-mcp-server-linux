@@ -1,0 +1,61 @@
+name: test
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  # Run on first day of month at 3 AM UTC
+  schedule:
+    - cron: '0 3 1 * *'
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: checkout repo
+        uses: actions/checkout@v5
+
+      - name: bash scripts/build_docker_image.sh
+        run: |
+          set -eo pipefail
+          bash scripts/build_docker_image.sh
+
+      - name: print system info
+        run: |
+          set -eo pipefail
+          docker info
+          docker image ls
+          docker ps
+          df -h
+          id
+          ls -al /dev/snd || true
+          ls -al /dev/input
+
+      - name: bash scripts/download_whisper_model.sh
+        run: |
+          set -eo pipefail
+          bash scripts/download_whisper_model.sh
+
+      - name: bash scripts/test_unit.sh
+        run: |
+          set -eo pipefail
+          bash scripts/test_unit.sh
+
+      - name: install tmux for integration test
+        run: |
+          set -eo pipefail
+          sudo apt-get update && \
+          DEBIAN_FRONTEND=noninteractive sudo apt-get install -y --no-install-recommends tmux
+
+      - name: bash scripts/test_tmux_integration.sh
+        run: |
+          set -eo pipefail
+          bash scripts/test_tmux_integration.sh
+
+      - name: debug
+        if: failure()
+        run: |
+          docker ps -a | grep -v CONTAINER | cut -d' ' -f1 | xargs -I{} -r bash -c "docker container stats --no-stream {} ; docker logs {}"
