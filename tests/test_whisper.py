@@ -40,16 +40,18 @@ class TestWhisperIntegration:
             if channels != 1 or sample_width != 2 or framerate != 16000:
                 try:
                     import numpy as np
-                    # Convert bytes to numpy array
+                    from numpy.typing import NDArray
+
+                    audio_np: NDArray[np.float32]
                     if sample_width == 1:
-                        audio_np = np.frombuffer(audio_data, dtype=np.uint8)
-                        audio_np = (audio_np.astype(np.float32) - 128) / 128.0
+                        raw_audio = np.frombuffer(audio_data, dtype=np.uint8)
+                        audio_np = (raw_audio.astype(np.float32) - 128) / 128.0
                     elif sample_width == 2:
-                        audio_np = np.frombuffer(audio_data, dtype=np.int16)
-                        audio_np = audio_np.astype(np.float32) / 32768.0
+                        raw_audio = np.frombuffer(audio_data, dtype=np.int16)
+                        audio_np = raw_audio.astype(np.float32) / 32768.0
                     elif sample_width == 4:
-                        audio_np = np.frombuffer(audio_data, dtype=np.int32)
-                        audio_np = audio_np.astype(np.float32) / 2147483648.0
+                        raw_audio = np.frombuffer(audio_data, dtype=np.int32)
+                        audio_np = raw_audio.astype(np.float32) / 2147483648.0
                     else:
                         return audio_data  # Use as-is if unknown format
                     

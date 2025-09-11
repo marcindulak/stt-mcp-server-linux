@@ -8,7 +8,7 @@ from typing import Any, Dict, List, Optional, Callable
 import datetime
 import evdev
 import queue
-import sounddevice
+import sounddevice  # type: ignore[import-untyped]
 import inspect
 import unicodedata
 
@@ -242,7 +242,7 @@ class WhisperEngine(TranscriptionEngine):
         self.language = language
         self.logger = create_logger(__name__)
         self.logger.info(f"Loading Whisper model with language: {language}")
-        import whisper
+        import whisper  # type: ignore[import-untyped]
         self.model = whisper.load_model("tiny")
         self.logger.info("Whisper model loaded successfully")
     
@@ -267,7 +267,7 @@ class VoskEngine(TranscriptionEngine):
     def __init__(self) -> None:
         self.logger = create_logger(__name__)
         self.logger.info("Loading Vosk model")
-        import vosk
+        import vosk  # type: ignore[import-untyped]
         self.model = vosk.Model("/vosk")
         self.recognizer = vosk.KaldiRecognizer(self.model, 16000)
         self.logger.info("Vosk model loaded successfully")
@@ -397,11 +397,11 @@ class KeyboardMonitor:
             async for event in dev.async_read_loop():
                 if event.type == evdev.ecodes.EV_KEY:
                     key_event = evdev.categorize(event)
-                    if key_event.keycode == 'KEY_RIGHTCTRL':
-                        if key_event.keystate == key_event.key_down:
+                    if key_event.keycode == 'KEY_RIGHTCTRL':  # type: ignore[attr-defined]
+                        if key_event.keystate == key_event.key_down:  # type: ignore[attr-defined]
                             self.logger.info("Right Ctrl key pressed")
                             on_key_press()
-                        elif key_event.keystate == key_event.key_up:
+                        elif key_event.keystate == key_event.key_up:  # type: ignore[attr-defined]
                             self.logger.info("Right Ctrl key released")
                             on_key_release()
         except Exception as e:
@@ -414,7 +414,7 @@ class KeyboardMonitor:
             raise RuntimeError("No keyboard input devices found.")
         
         await asyncio.gather(*(
-            self.monitor_device(dev.path, on_key_press, on_key_release)
+            self.monitor_device(str(dev.path), on_key_press, on_key_release)
             for dev in keyboards
         ))
 

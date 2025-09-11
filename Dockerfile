@@ -43,9 +43,10 @@ RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-ins
     python3-sympy \
     python3-typing-extensions
 
-# Install pytest dependencies
+# Install test dependencies
 RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
     python3-iniconfig \
+    python3-mypy \
     python3-pluggy \
     python3-pygments \
     python3-pytest

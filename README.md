@@ -147,6 +147,14 @@ End-to-end integration test verifies the functionality of injecting text into th
 bash scripts/test_tmux_integration.sh
 ```
 
+## Type checking
+
+Run mypy static type checking:
+
+```
+bash scripts/test_mypy.sh
+```
+
 # Implementation overview
 
 The system uses object composition with separated responsibilities across multiple classes:

@@ -55,6 +55,11 @@ jobs:
           set -eo pipefail
           bash scripts/test_tmux_integration.sh
 
+      - name: bash scripts/test_mypy.sh
+        run: |
+          set -eo pipefail
+          bash scripts/test_mypy.sh
+
       - name: debug
         if: failure()
         run: |
