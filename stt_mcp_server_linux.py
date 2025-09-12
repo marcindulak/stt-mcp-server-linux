@@ -336,6 +336,10 @@ class TmuxOutputHandler(OutputHandler):
         # Restrict to printable characters only
         text = ''.join(char for char in text if char.isprintable())
         
+        # Limit text length to prevent excessive input (5000 characters ≈ 5 minutes of speech)
+        if len(text) > 5000:
+            text = text[:5000]
+        
         return text.strip()
     
     def send_text(self, text: str) -> None:
