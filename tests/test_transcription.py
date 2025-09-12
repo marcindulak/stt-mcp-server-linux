@@ -35,42 +35,59 @@ class TestTranscriptionWorkflow:
     def test_key_press_starts_recording(self):
         """Test that key press starts recording."""
         class MockConfig:
-            keyboard_name = None
-            use_whisper = True
-            output_type = "stdout"
-            session_name = "test"
+            keyboard = None
             language = "en"
+            model = "whisper"
+            output_type = "stdout"
+            session = "test"
         
         with patch('stt_mcp_server_linux.AudioRecorder') as mock_audio:
-            with patch('stt_mcp_server_linux.KeyboardMonitor'):
-                with patch('stt_mcp_server_linux.WhisperEngine'):
-                    with patch('stt_mcp_server_linux.StdoutOutputHandler'):
-                        service = SpeechToTextService(MockConfig())
-                        mock_audio_instance = mock_audio.return_value
+            with patch('stt_mcp_server_linux.KeyboardMonitor') as mock_keyboard:
+                with patch('stt_mcp_server_linux.WhisperEngine') as mock_whisper:
+                    with patch('stt_mcp_server_linux.StdoutOutputHandler') as mock_output:
+                        config = MockConfig()
+                        audio_recorder = mock_audio.return_value
+                        keyboard_monitor = mock_keyboard.return_value
+                        transcription_engine = mock_whisper.return_value
+                        output_handler = mock_output.return_value
+                        
+                        service = SpeechToTextService(
+                            config, audio_recorder, keyboard_monitor, 
+                            transcription_engine, output_handler
+                        )
                         
                         service.on_key_press()
-                        mock_audio_instance.start_recording.assert_called_once()
+                        audio_recorder.start_recording.assert_called_once()
     
     def test_key_release_processes_audio(self):
         """Test that key release processes audio data."""
         class MockConfig:
-            keyboard_name = None
-            use_whisper = True
-            output_type = "stdout"
-            session_name = "test"
+            keyboard = None
             language = "en"
+            model = "whisper"
+            output_type = "stdout"
+            session = "test"
         
         with patch('stt_mcp_server_linux.AudioRecorder') as mock_audio:
-            with patch('stt_mcp_server_linux.KeyboardMonitor'):
+            with patch('stt_mcp_server_linux.KeyboardMonitor') as mock_keyboard:
                 with patch('stt_mcp_server_linux.WhisperEngine') as mock_whisper:
                     with patch('stt_mcp_server_linux.StdoutOutputHandler') as mock_output:
-                        service = SpeechToTextService(MockConfig())
+                        config = MockConfig()
+                        audio_recorder = mock_audio.return_value
+                        keyboard_monitor = mock_keyboard.return_value
+                        transcription_engine = mock_whisper.return_value
+                        output_handler = mock_output.return_value
                         
-                        mock_audio.return_value.stop_recording.return_value = b"audio_data"
-                        mock_whisper.return_value.transcribe.return_value = "transcribed text"
+                        service = SpeechToTextService(
+                            config, audio_recorder, keyboard_monitor,
+                            transcription_engine, output_handler
+                        )
+                        
+                        audio_recorder.stop_recording.return_value = b"audio_data"
+                        transcription_engine.transcribe.return_value = "transcribed text"
                         
                         service.on_key_release()
                         
-                        mock_audio.return_value.stop_recording.assert_called_once()
-                        mock_whisper.return_value.transcribe.assert_called_once_with(b"audio_data")
-                        mock_output.return_value.send_text.assert_called_once_with("transcribed text")
+                        audio_recorder.stop_recording.assert_called_once()
+                        transcription_engine.transcribe.assert_called_once_with(b"audio_data")
+                        output_handler.send_text.assert_called_once_with("transcribed text")
