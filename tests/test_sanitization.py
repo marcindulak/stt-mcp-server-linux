@@ -43,3 +43,17 @@ class TestInputSanitization:
         assert self.handler._sanitize_text("") == ""
         assert self.handler._sanitize_text(None) == ""
         assert self.handler._sanitize_text("$()") == ""
+    
+    def test_character_limit_enforcement(self):
+        """Test that text is truncated to 5000 characters."""
+        # Test exactly 5000 characters
+        text_5000 = "a" * 5000
+        result = self.handler._sanitize_text(text_5000)
+        assert len(result) == 5000
+        assert result == text_5000
+        
+        # Test 5001 characters (should be truncated)
+        text_5001 = "a" * 5001
+        result = self.handler._sanitize_text(text_5001)
+        assert len(result) == 5000
+        assert result == "a" * 5000
