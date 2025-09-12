@@ -1,16 +1,21 @@
 import argparse
+import asyncio
+import datetime
+import inspect
 import json
 import logging
-import sys
-import asyncio
-import subprocess
-from typing import Any, Dict, List, Optional, Callable
-import datetime
-import evdev
 import queue
-import sounddevice  # type: ignore[import-untyped]
-import inspect
+import re
+import subprocess
+import sys
 import unicodedata
+from dataclasses import dataclass
+from typing import Any, Callable, Dict, List, Optional
+
+import evdev  # type: ignore[import-untyped]
+import sounddevice  # type: ignore[import-untyped]
+
+KeyEventCallback = Callable[[], None]
 
 
 class JsonFormatter(logging.Formatter):
@@ -194,37 +199,81 @@ class AudioRecorder:
             return
             
         self.logger.info("Starting audio recording")
-        self.recording_active = True
-        self.audio_stream = sounddevice.RawInputStream(
-            samplerate=16000, blocksize=2048, dtype='int16', channels=1,
-            callback=self.audio_callback
-        )
-        self.audio_stream.start()
-        self.logger.info("Audio recording started successfully")
+        try:
+            self.audio_stream = sounddevice.RawInputStream(
+                samplerate=16000, blocksize=2048, dtype='int16', channels=1,
+                callback=self.audio_callback
+            )
+            self.audio_stream.start()
+            self.recording_active = True
+            self.logger.info("Audio recording started successfully")
+        except (OSError, sounddevice.PortAudioError) as e:
+            self.logger.error(f"Failed to start audio recording: {e}")
+            self._cleanup_failed_stream()
+            self.recording_active = False
+            raise
     
     def stop_recording(self) -> bytes:
         """Stop audio recording and return collected audio data."""
-        if not self.recording_active or not self.audio_stream:
+        if not self.recording_active:
             self.logger.debug("Recording not active, nothing to stop")
             return b""
-            
-        self.logger.info("Stopping audio recording")
-        self.recording_active = False
-        self.audio_stream.stop()
-        self.audio_stream.close()
         
-        audio_bytes = b""
-        while not self.audio_queue.empty():
-            audio_bytes += self.audio_queue.get()
+        if not self.audio_stream:
+            self.logger.error("Audio stream is None but recording is active - inconsistent state")
+            self.recording_active = False
+            return b""
         
-        self.logger.info(f"Audio recording stopped, collected {len(audio_bytes)} bytes")
-        return audio_bytes
-    
-    def cleanup(self) -> None:
-        """Clean up audio resources."""
-        if self.audio_stream:
+        try:
+            self.logger.info("Stopping audio recording")
+            self.recording_active = False
             self.audio_stream.stop()
             self.audio_stream.close()
+            
+            audio_bytes = b""
+            
+            while not self.audio_queue.empty():
+                try:
+                    audio_bytes += self.audio_queue.get_nowait()
+                except queue.Empty:
+                    break
+                
+            self.logger.info(f"Audio recording stopped, collected {len(audio_bytes)} bytes")
+            return audio_bytes
+        
+        except Exception as e:
+            self.logger.error(f"Error stopping audio recording: {e}")
+            self.recording_active = False
+            return b""
+    
+    def __enter__(self) -> 'AudioRecorder':
+        return self
+    
+    def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
+        self.cleanup()
+    
+    def _cleanup_failed_stream(self) -> None:
+        """Clean up audio stream after initialization failure."""
+        if self.audio_stream:
+            try:
+                self.audio_stream.close()
+            except Exception as e:
+                self.logger.warning(f"Failed to close audio stream during error cleanup: {e}")
+            finally:
+                self.audio_stream = None
+
+    def cleanup(self) -> None:
+        """Clean up audio resources."""
+        try:
+            if self.audio_stream:
+                if self.recording_active:
+                    self.audio_stream.stop()
+                self.audio_stream.close()
+                self.audio_stream = None
+            self.recording_active = False
+            self.logger.info("Audio resources cleaned up successfully")
+        except Exception as e:
+            self.logger.error(f"Error during audio cleanup: {e}")
 
 
 class TranscriptionEngine:
@@ -313,8 +362,21 @@ class TmuxOutputHandler(OutputHandler):
     """Tmux-based output handler."""
     
     def __init__(self, session_name: str) -> None:
-        self.session_name = session_name
+        self.session_name = self._validate_session_name(session_name)
         self.logger = create_logger(__name__)
+    
+    def _validate_session_name(self, session_name: str) -> str:
+        """Validate tmux session name against injection attacks."""
+        if not session_name or not session_name.strip():
+            raise ValueError("Session name cannot be empty")
+        
+        if not re.match(r'^[a-zA-Z0-9_-]+$', session_name):
+            raise ValueError("Session name contains invalid characters")
+        
+        if len(session_name) > 64:
+            raise ValueError("Session name too long")
+            
+        return session_name.strip()
     
     def _sanitize_text(self, text: str) -> str:
         """Sanitize text to prevent command injection."""
@@ -380,19 +442,37 @@ class KeyboardMonitor:
         """Find keyboard input devices matching the configured name."""
         self.logger.info("Scanning for keyboard devices")
         keyboards = []
+        available_keyboards = []
+        
         for dev_path in evdev.list_devices():
             try:
                 device = evdev.InputDevice(dev_path)
                 if "keyboard" in device.name.lower():
+                    available_keyboards.append(device.name)
                     if self.keyboard_name is None or self.keyboard_name.lower() == device.name.lower():
                         self.logger.info(f"Found matching keyboard: {device.name} ({dev_path})")
                         keyboards.append(device)
             except Exception:
                 pass
+        
+        if not keyboards and self.keyboard_name:
+            available_list = ", ".join(available_keyboards) if available_keyboards else "none"
+            raise RuntimeError(
+                f"No keyboard named '{self.keyboard_name}' found. "
+                f"Available keyboards: {available_list}. "
+                f"Use --keyboard option or leave empty to use all keyboards."
+            )
+        
+        if not keyboards:
+            raise RuntimeError(
+                "No keyboard input devices found. "
+                "Ensure you have appropriate permissions to access /dev/input devices."
+            )
+        
         self.logger.info(f"Found {len(keyboards)} matching keyboard devices")
         return keyboards
     
-    async def monitor_device(self, dev_path: str, on_key_press: Callable[[], None], on_key_release: Callable[[], None]) -> None:
+    async def monitor_device(self, dev_path: str, on_key_press: KeyEventCallback, on_key_release: KeyEventCallback) -> None:
         """Monitor a single keyboard device for Right Ctrl events."""
         dev = evdev.InputDevice(dev_path)
         self.logger.info(f"Waiting for Right Ctrl key press on {dev.name} ({dev_path})")
@@ -411,7 +491,7 @@ class KeyboardMonitor:
         except Exception as e:
             self.logger.error(f"Error monitoring device {dev_path}: {e}")
     
-    async def start_monitoring(self, on_key_press: Callable[[], None], on_key_release: Callable[[], None]) -> None:
+    async def start_monitoring(self, on_key_press: KeyEventCallback, on_key_release: KeyEventCallback) -> None:
         """Start monitoring all matching keyboards."""
         keyboards = await self.find_keyboards()
         if not keyboards:
@@ -426,22 +506,18 @@ class KeyboardMonitor:
 class SpeechToTextService:
     """Main speech-to-text service coordinating all components."""
     
-    def __init__(self, config: 'Config') -> None:
+    def __init__(self, config: 'Config', 
+                 audio_recorder: AudioRecorder,
+                 keyboard_monitor: KeyboardMonitor,
+                 transcription_engine: TranscriptionEngine,
+                 output_handler: OutputHandler) -> None:
         self.config = config
         self.logger = create_logger(__name__)
         
-        self.audio_recorder = AudioRecorder()
-        self.keyboard_monitor = KeyboardMonitor(config.keyboard_name)
-        
-        if config.use_whisper:
-            self.transcription_engine: TranscriptionEngine = WhisperEngine(config.language)
-        else:
-            self.transcription_engine = VoskEngine()
-        
-        if config.output_type == "tmux":
-            self.output_handler: OutputHandler = TmuxOutputHandler(config.session_name)
-        else:
-            self.output_handler = StdoutOutputHandler()
+        self.audio_recorder = audio_recorder
+        self.keyboard_monitor = keyboard_monitor
+        self.transcription_engine = transcription_engine
+        self.output_handler = output_handler
     
     def on_key_press(self) -> None:
         """Handle Right Ctrl key press."""
@@ -475,15 +551,24 @@ class SpeechToTextService:
             self.audio_recorder.cleanup()
 
 
+@dataclass(frozen=True)
 class Config:
     """Configuration container for the application."""
-    
-    def __init__(self, args: argparse.Namespace) -> None:
-        self.keyboard_name: Optional[str] = args.keyboard
-        self.language: str = args.language
-        self.use_whisper: bool = args.model == "whisper"
-        self.output_type: str = args.output
-        self.session_name: str = args.session
+    keyboard: Optional[str]
+    language: str
+    model: str
+    output_type: str
+    session: str
+
+    @classmethod
+    def from_args(cls, args: argparse.Namespace) -> 'Config':
+        return cls(
+            keyboard=args.keyboard,
+            language=args.language,
+            model=args.model,
+            output_type=args.output,
+            session=args.session
+        )
 
 
 def create_argument_parser() -> argparse.ArgumentParser:
@@ -527,10 +612,29 @@ def main() -> None:
     """Application entry point."""
     parser = create_argument_parser()
     args = parser.parse_args()
-    config = Config(args)
+    config = Config.from_args(args)
     logger = create_logger(__name__)
     
-    speech_to_text_service = SpeechToTextService(config)
+    audio_recorder = AudioRecorder()
+    keyboard_monitor = KeyboardMonitor(config.keyboard)
+    
+    transcription_engine: TranscriptionEngine
+    if config.model == "whisper":
+        transcription_engine = WhisperEngine(config.language)
+    elif config.model == "vosk":
+        transcription_engine = VoskEngine()
+    else:
+        raise ValueError(f"Unknown transcription model: {config.model}")
+    
+    output_handler: OutputHandler
+    if config.output_type == "tmux":
+        output_handler = TmuxOutputHandler(config.session)
+    else:
+        output_handler = StdoutOutputHandler()
+    
+    speech_to_text_service = SpeechToTextService(
+        config, audio_recorder, keyboard_monitor, transcription_engine, output_handler
+    )
     
     if sys.stdin.isatty():
         logger.info("Service Initialized in standalone mode")
