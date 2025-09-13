@@ -1,27 +1,12 @@
 [![test](https://github.com/marcindulak/stt-mcp-server-linux/actions/workflows/test.yml/badge.svg)](https://github.com/marcindulak/stt-mcp-server-linux/actions/workflows/test.yml)
 
+[![Mentioned in Awesome Claude Code](https://awesome.re/mentioned-badge.svg)](https://github.com/hesreallyhim/awesome-claude-code)
+
 > Co-Authored-By: Claude
 
 # Functionality overview
 
 Local speech-to-text MCP server for Linux.
-
-> [!NOTE]
-> Here is the summary of the usage, assuming the setup below has been performed.
->
-> Navigate to any of your Claude directories, start Claude in a new Tmux session stored under `~/.tmux`:
->
-> `TMUX_TMPDIR=~/.tmux tmux new-session -s claude 'claude'`
->
-> and ask to `Run the transcribe tool provided by the stt-mcp-server-linux MCP server`.
->
-> Press the `Right Ctrl` key to activate `Push-to-Talk` functionality.
-> Release the key to perform the transcription and inject the resulting text into Claude.
-> In Claude, press `esc to interrupt` and the `transcribe` tool will continue running in the background.
->
-> Using this setup, to paste into Tmux, use `Left Ctrl+Shift+V`.
->
-> To copy from Tmux, press `Shift` and use text mouse selection.
 
 The setup requires Claude to run inside a Tmux session to enable the transcribed text injection into Claude's input stream.
 
@@ -35,6 +20,9 @@ On `Right Ctrl` key release, speech-to-text transcription occurs (using Whisper 
 The transcribed text is injected into Claude's input stream via Tmux send-keys.
 
 The MCP server is Linux-only due to `/dev` device dependencies.
+
+> [!WARNING]
+> This project will create `~/.tmux` and `~/.whisper` directories.
 
 # Usage examples
 
@@ -105,6 +93,9 @@ The full setup instructions follow below.
    # Reduce escape key delay to reduce flicker
    set -g escape-time 0
    ```
+
+> [!NOTE]
+> The first time setup is now complete!
 
 8. Navigate to any of your Claude directories, start Claude in a new Tmux session stored under `~/.tmux`.
    The reason for using a custom `TMUX_TMPDIR` location instead of the default `/tmp/tmux-$(id -u)` is to make it shareable between the Docker host and the container with correct file ownership.
