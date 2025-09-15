@@ -40,17 +40,17 @@ class JsonFormatter(logging.Formatter):
         return json.dumps(log_obj)
 
 
-def create_logger(name: str, log_level: int = logging.INFO, use_stderr: bool = False) -> logging.Logger:
+def create_logger(name: str, log_level: int = logging.INFO, use_stderr: bool = True) -> logging.Logger:
     """Create and configure a logger with JSON formatting."""
     logger = logging.getLogger(name)
     
-    if logger.handlers:
-        return logger
-        
+    logger.handlers.clear()
     logger.setLevel(log_level)
     logger.propagate = False
 
     log_format = JsonFormatter()
+    # MCP stdio server must not log to stdout
+    # See https://modelcontextprotocol.io/docs/develop/build-server#logging-in-mcp-servers
     stream = sys.stderr if use_stderr else sys.stdout
     console = logging.StreamHandler(stream)
     console.setFormatter(log_format)

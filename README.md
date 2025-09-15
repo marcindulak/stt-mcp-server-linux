@@ -75,8 +75,8 @@ The full setup instructions follow below.
    stt-mcp-server-linux: ... ✓ Connected
    ```
 
-> [!WARNING]
-> The need to add the MCP server per directory seems to be due to https://github.com/anthropics/claude-code/issues/6888
+> [!NOTE]
+> The addition the MCP server needs to be performed only once, because the server is added with the `--scope user`.
 
 7. Configure Tmux, so `~/.tmux.conf` contains at least:
 
