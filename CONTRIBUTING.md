@@ -12,6 +12,8 @@
 
 # 3. Use useful comments in the code
 
+   The reason for this requirement is to make the software easier to understand.
+
    Avoid uninformative, vacuous comments, such as those that tend to be written by AI.
    Add comments when the code is hard to understand, or to explain edge cases.
    See more discussion about why comments are useful in [comments](https://github.com/johnousterhout/aposd-vs-clean-code?tab=readme-ov-file#comments).
@@ -28,7 +30,7 @@
 
    For example, this is an expected title format:
 
-   > Implement authentication
+   - Implement authentication
 
    These are not:
 
