@@ -7,7 +7,7 @@ PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 
 export CONTAINER_NAME="stt-mcp-server-linux-integration"
 export TMUX_SESSION="stt-mcp-server-linux-integration"
-export TMUX_TMPDIR="${HOME}/.tmux-integration"
+export TMUX_TMPDIR=~/.stt-mcp-server-linux/tmux-integration
 
 log() {
     echo "[$(date '+%H:%M:%S')] $1"
