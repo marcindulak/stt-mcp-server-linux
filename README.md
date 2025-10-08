@@ -22,7 +22,7 @@ The transcribed text is injected into Claude's input stream via Tmux send-keys.
 The MCP server is Linux-only due to `/dev` device dependencies.
 
 > [!WARNING]
-> This project will create `~/.tmux` and `~/.whisper` directories.
+> This project will create `~/.stt-mcp-server-linux` directory.
 
 # Usage examples
 
@@ -49,7 +49,7 @@ The full setup instructions follow below.
    bash scripts/build_docker_image.sh
    ```
 
-5. Download the Whisper tiny model under ~/.whisper`:
+5. Download the Whisper tiny model under ~/.stt-mcp-server-linux/whisper`:
 
    ```
    bash scripts/download_whisper_model.sh
@@ -60,7 +60,7 @@ The full setup instructions follow below.
    Navigate to any of your Claude directories.
 
    ```
-   bash "$STT_MCP_SERVER_LINUX_PATH"/scripts/add_mcp_server_to_claude.sh
+   bash "${STT_MCP_SERVER_LINUX_PATH}/scripts/add_mcp_server_to_claude.sh"
    ```
 
    Verify the Claude connection to the MCP server with:
@@ -97,11 +97,11 @@ The full setup instructions follow below.
 > [!NOTE]
 > The first time setup is now complete!
 
-8. Navigate to any of your Claude directories, start Claude in a new Tmux session stored under `~/.tmux`.
+8. Navigate to any of your Claude directories, start Claude in a new Tmux session stored under `~/.stt-mcp-server-linux/tmux`.
    The reason for using a custom `TMUX_TMPDIR` location instead of the default `/tmp/tmux-$(id -u)` is to make it shareable between the Docker host and the container with correct file ownership.
 
    ```
-   TMUX_TMPDIR=~/.tmux tmux new-session -s claude 'claude'
+   TMUX_TMPDIR=~/.stt-mcp-server-linux/tmux tmux new-session -s claude 'claude'
    ```
 
    and ask to `Run the transcribe tool provided by the stt-mcp-server-linux MCP server`.

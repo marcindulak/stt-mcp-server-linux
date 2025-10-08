@@ -4,7 +4,7 @@ set -Eeuo pipefail
 
 CONTAINER_NAME=${CONTAINER_NAME:-stt-mcp-server-linux}
 TMUX_SESSION=${TMUX_SESSION:-claude}
-TMUX_TMPDIR=${TMUX_TMPDIR:-"$HOME"/.tmux}
+TMUX_TMPDIR=${TMUX_TMPDIR:-~/.stt-mcp-server-linux/tmux}
 
 docker stop "$CONTAINER_NAME" || true
 docker rm "$CONTAINER_NAME" || true
@@ -14,7 +14,7 @@ DOCKER_CMD="$DOCKER_CMD --device /dev/input"
 if [ -d "/dev/snd" ]; then
     DOCKER_CMD="$DOCKER_CMD --device /dev/snd"
 fi
-DOCKER_CMD="$DOCKER_CMD --volume ~/.whisper:/.whisper"
+DOCKER_CMD="$DOCKER_CMD --volume ~/.stt-mcp-server-linux/whisper:/.whisper"
 DOCKER_CMD="$DOCKER_CMD --volume $TMUX_TMPDIR:/.tmux"
 DOCKER_CMD="$DOCKER_CMD --volume ./tests:/app/tests"
 DOCKER_CMD="$DOCKER_CMD stt-mcp-server-linux"

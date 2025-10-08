@@ -83,7 +83,7 @@ RUN cat /etc/group
 ENV XDG_CACHE_HOME=/.whisper
 RUN mkdir ${XDG_CACHE_HOME} && chown -R ${USER}:${USER} ${XDG_CACHE_HOME} && chmod 0700 ${XDG_CACHE_HOME}
 ENV TMUX_TMPDIR=/.tmux
-RUN mkdir ${TMUX_TMPDIR} && chown -R ${USER}:${USER} ${TMUX_TMPDIR} && chmod 0700 ${TMUX_TMPDIR}
+RUN mkdir -p ${TMUX_TMPDIR}/tmux-${UID} && chown -R ${USER}:${USER} ${TMUX_TMPDIR} && chmod 0700 ${TMUX_TMPDIR}
 
 WORKDIR /app
 RUN chown -R ${USER}:${USER} /app && chmod 0700 /app
