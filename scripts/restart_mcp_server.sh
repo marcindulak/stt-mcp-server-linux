@@ -14,6 +14,12 @@ DOCKER_CMD="$DOCKER_CMD --device /dev/input"
 if [ -d "/dev/snd" ]; then
     DOCKER_CMD="$DOCKER_CMD --device /dev/snd"
 fi
+# The /dev/input group owner ID may differ outside/inside the container.
+# For the keyboard detection to work inside of the container,
+# the user inside of the container must be the member
+# of the /dev/input group ID present outside of the container.
+INPUT_GID=$(getent group input | cut -d: -f3)
+DOCKER_CMD="$DOCKER_CMD --group-add $INPUT_GID"
 DOCKER_CMD="$DOCKER_CMD --volume ~/.stt-mcp-server-linux/whisper:/.whisper"
 DOCKER_CMD="$DOCKER_CMD --volume $TMUX_TMPDIR:/.tmux"
 DOCKER_CMD="$DOCKER_CMD --volume ./tests:/app/tests"

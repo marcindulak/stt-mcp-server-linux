@@ -67,16 +67,17 @@ RUN if [ "${GID}" != "1000" ] || [ "${UID}" != "1000" ]; then \
     fi
 
 RUN usermod -aG audio ${USER}
-# The usermod below creates a security risk due to non least-privilege grants.
-# The input group created by udev can have different id on the host and inside of the container
-# and we don't know the id on the host, so grant USER membership in a group range.
-RUN set -eux && \
-    for gid in $(seq 990 999); do \
-        if ! getent group "$gid" >/dev/null; then \
-            groupadd -g "$gid" "group$gid"; \
-        fi \
-    done
-RUN usermod -aG $(seq -s, 990 999) ${USER}
+# The /dev/input group owner ID may differ outside/inside the container.
+# For the keyboard detection to work inside of the container,
+# the user inside of the container must be the member
+# of the /dev/input group ID present outside of the container.
+ARG INPUT_GID=900
+RUN getent group ${INPUT_GID} || groupadd --non-unique --gid ${INPUT_GID} ${INPUT_GID}
+RUN usermod -aG ${INPUT_GID} ${USER}
+# The membership of the user in the /dev/input group ID present inside of the container
+# does not matter for this application, but let's still make the ${USER} to be member of this group
+RUN usermod -aG $(getent group input | cut -d: -f3) ${USER}
+
 RUN cat /etc/passwd
 RUN cat /etc/group
 
