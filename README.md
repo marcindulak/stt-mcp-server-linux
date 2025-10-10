@@ -40,7 +40,7 @@ The full setup instructions follow below.
    ```
    git clone https://github.com/marcindulak/stt-mcp-server-linux
    cd stt-mcp-server-linux
-   export STT_MCP_SERVER_LINUX_PATH=$(readlink -f .)
+   export STT_MCP_SERVER_LINUX_PATH=$(pwd)
    ```
 
 4. Build the Docker image of the MCP server:
