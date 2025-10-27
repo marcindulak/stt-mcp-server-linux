@@ -49,7 +49,7 @@ The full setup instructions follow below.
    bash scripts/build_docker_image.sh
    ```
 
-5. Download the Whisper tiny model under ~/.stt-mcp-server-linux/whisper`:
+5. Download the Whisper tiny model under `~/.stt-mcp-server-linux/whisper`:
 
    ```
    bash scripts/download_whisper_model.sh
@@ -110,7 +110,8 @@ The full setup instructions follow below.
    Release the key to perform the transcription and inject the resulting text into Claude.
 
 > [!WARNING]
-> Give the MCP server some time to initialize and download the Whisper model.
+> Give the MCP server some time to initialize.
+> You may need to explicitly verify its status with the `/mcp` command.
 >
 > Use `docker logs stt-mcp-server-linux` to check the progress.
 >
