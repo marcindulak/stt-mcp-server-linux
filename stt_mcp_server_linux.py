@@ -286,9 +286,10 @@ class TranscriptionEngine:
 
 class WhisperEngine(TranscriptionEngine):
     """Whisper-based transcription engine."""
-    
-    def __init__(self, language: str = "en") -> None:
+
+    def __init__(self, language: str = "en", pad_up_to_seconds: float = 0.0) -> None:
         self.language = language
+        self.pad_up_to_seconds = pad_up_to_seconds
         self.logger = create_logger(__name__)
         self.logger.info(f"Loading Whisper model with language: {language}")
         import whisper  # type: ignore[import-untyped]
@@ -300,10 +301,21 @@ class WhisperEngine(TranscriptionEngine):
         if not audio_data:
             self.logger.debug("No audio data provided for transcription")
             return ""
-            
+
         self.logger.info(f"Starting Whisper transcription of {len(audio_data)} bytes")
         import numpy as np
         audio_np = np.frombuffer(audio_data, dtype=np.int16).astype(np.float32) / 32768.0
+
+        if self.pad_up_to_seconds > 0.0:
+            sample_rate = 16000
+            current_duration = len(audio_np) / sample_rate
+            target_samples = int(self.pad_up_to_seconds * sample_rate)
+
+            if len(audio_np) < target_samples:
+                padding_samples = target_samples - len(audio_np)
+                self.logger.info(f"Padding audio from {current_duration:.2f}s to {self.pad_up_to_seconds}s")
+                audio_np = np.pad(audio_np, (0, padding_samples), mode='constant', constant_values=0.0)
+
         result = self.model.transcribe(audio_np, fp16=False, language=self.language)
         text = result.get("text", "").strip()
         self.logger.info(f"Whisper transcription completed: '{text}'")
@@ -558,6 +570,7 @@ class Config:
     language: str
     model: str
     output_type: str
+    pad_up_to_seconds: float
     session: str
 
     @classmethod
@@ -567,6 +580,7 @@ class Config:
             language=args.language,
             model=args.model,
             output_type=args.output,
+            pad_up_to_seconds=args.pad_up_to_seconds,
             session=args.session
         )
 
@@ -593,14 +607,20 @@ def create_argument_parser() -> argparse.ArgumentParser:
         help="Choose speech-to-text transcription model (default: whisper)"
     )
     parser.add_argument(
-        "--output", 
-        choices=["stdout", "tmux"], 
+        "--output",
+        choices=["stdout", "tmux"],
         default="tmux",
         help="Choose output destination (default: tmux)"
     )
     parser.add_argument(
-        "--session", 
-        type=str, 
+        "--pad-up-to-seconds",
+        type=float,
+        default=0.0,
+        help="Pad short audio with silence up to specified duration in seconds (Whisper only, default: 0.0 = no padding), following https://arxiv.org/abs/2412.11272. Example: 30.0 for 30 seconds"
+    )
+    parser.add_argument(
+        "--session",
+        type=str,
         default="claude",
         help="Tmux session name (default: claude)"
     )
@@ -620,8 +640,10 @@ def main() -> None:
     
     transcription_engine: TranscriptionEngine
     if config.model == "whisper":
-        transcription_engine = WhisperEngine(config.language)
+        transcription_engine = WhisperEngine(config.language, config.pad_up_to_seconds)
     elif config.model == "vosk":
+        if config.pad_up_to_seconds > 0.0:
+            logger.warning("--pad-up-to-seconds option is ignored for Vosk model")
         transcription_engine = VoskEngine()
     else:
         raise ValueError(f"Unknown transcription model: {config.model}")

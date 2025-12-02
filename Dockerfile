@@ -1,7 +1,5 @@
 FROM debian:trixie-slim
 
-ENV USER=nonroot
-
 # Install base dependencies
 RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
     libasound2-dev \

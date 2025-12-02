@@ -26,5 +26,6 @@ DOCKER_CMD="$DOCKER_CMD --volume $(pwd)/tests:/app/tests"
 DOCKER_CMD="$DOCKER_CMD stt-mcp-server-linux"
 DOCKER_CMD="$DOCKER_CMD /home/nonroot/venv/bin/python /app/stt_mcp_server_linux.py"
 DOCKER_CMD="$DOCKER_CMD --session $TMUX_SESSION"
+DOCKER_CMD="$DOCKER_CMD --pad-up-to-seconds 30"
 
 eval $DOCKER_CMD
