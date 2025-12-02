@@ -7,8 +7,9 @@
 # Functionality overview
 
 Local speech-to-text MCP server for Linux.
+The speech-to-text functionality can also be used in a standalone mode in Tmux, without relying on MCP.
 
-The setup requires Claude to run inside a Tmux session to enable the transcribed text injection into Claude's input stream.
+Claude Code is required to run inside a Tmux session to enable the transcribed text injection into Claude's input stream.
 
 The MCP server runs in a Docker container with access to host input and audio devices.
 The server provides a `transcribe` tool accessible through MCP protocol.
@@ -26,9 +27,7 @@ The MCP server is Linux-only due to `/dev` device dependencies.
 
 # Usage examples
 
-The full setup instructions follow below.
-
-0. Install [Claude Code](https://docs.anthropic.com/en/docs/claude-code/setup)
+The instructions follow below.
 
 1. Install [Docker Engine](https://docs.docker.com/engine/install/) or [Docker Desktop](https://docs.docker.com/desktop/)
 
@@ -55,7 +54,31 @@ The full setup instructions follow below.
    bash scripts/download_whisper_model.sh
    ```
 
-6. Add the MCP server to Claude (MCP client).
+6. Configure Tmux, so `~/.tmux.conf` contains at least:
+
+   ```
+   # Enable mouse support for scrolling
+   set -g mouse on
+
+   # Set large scrollback lines buffer
+   set -g history-limit 1000000
+
+   # Hide status bar to reduce flicker
+   set -g status off
+
+   # Reduce escape key delay to reduce flicker
+   set -g escape-time 0
+   ```
+
+## MCP mode
+
+In this mode, the local MCP server running in the Docker container exposes the `transcribe` tool.
+The tool is activated from Claude Code, running in a Tmux session.
+The tool sends the transcribed text into the Tmux session's input buffer.
+
+7. Install [Claude Code](https://docs.anthropic.com/en/docs/claude-code/setup)
+
+8. Add the MCP server to Claude (MCP client).
 
    Navigate to any of your Claude directories.
 
@@ -77,27 +100,9 @@ The full setup instructions follow below.
 
 > [!NOTE]
 > The addition the MCP server needs to be performed only once, because the server is added with the `--scope user`.
-
-7. Configure Tmux, so `~/.tmux.conf` contains at least:
-
-   ```
-   # Enable mouse support for scrolling
-   set -g mouse on
-
-   # Set large scrollback lines buffer
-   set -g history-limit 1000000
-
-   # Hide status bar to reduce flicker
-   set -g status off
-
-   # Reduce escape key delay to reduce flicker
-   set -g escape-time 0
-   ```
-
-> [!NOTE]
 > The first time setup is now complete!
 
-8. Navigate to any of your Claude directories, start Claude in a new Tmux session stored under `~/.stt-mcp-server-linux/tmux`.
+9. Navigate to any of your Claude directories, start Claude in a new Tmux session stored under `~/.stt-mcp-server-linux/tmux`.
    The reason for using a custom `TMUX_TMPDIR` location instead of the default `/tmp/tmux-$(id -u)` is to make it shareable between the Docker host and the container with correct file ownership.
 
    ```
@@ -120,6 +125,30 @@ The full setup instructions follow below.
 > In Claude, press `esc to interrupt` and the `transcribe` tool will continue running in the background.
 >
 > There seem to be no way to stop the MCP server transcribe tool, other than to `/quit` Claude.
+
+## Standalone mode (without MCP)
+
+The speech-to-text transcription can be performed without the MCP protocol.
+
+7. Start a new Tmux session. The example here starts a session for bash:
+
+   ```
+   TMUX_TMPDIR=~/.stt-mcp-server-linux/tmux tmux new-session -s bash 'bash'
+   ```
+
+8. Start the transcription service in standalone mode:
+
+   ```
+   MODE=standalone OUTPUT=tmux TMUX_SESSION=bash bash scripts/restart_mcp_server.sh
+   ```
+
+   Press the `Right Ctrl` key to activate `Push-to-Talk` functionality.
+
+   The transcribed text will be inserted into the Tmux session's input buffer.
+
+> [!WARNING]
+> The current limitation is that only one transcription container can be running at a given time.
+> If you start a new container, it will stop and replace the previous one.
 
 # Running tests
 

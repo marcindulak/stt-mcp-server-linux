@@ -429,7 +429,7 @@ class TmuxOutputHandler(OutputHandler):
             if sanitized_text != text:
                 self.logger.warning(f"Sanitized transcription text from '{text}' to '{sanitized_text}'")
             
-            subprocess.run(["tmux", "send-keys", "-t", sanitized_session, sanitized_text, "Enter"])
+            subprocess.run(["tmux", "send-keys", "-t", sanitized_session, sanitized_text])
             self.logger.info(f"Sent transcription to tmux session '{self.session_name}': {sanitized_text}")
         except Exception as e:
             self.logger.error(f"Error sending transcription to tmux session '{self.session_name}': {e}")
@@ -568,6 +568,7 @@ class Config:
     """Configuration container for the application."""
     keyboard: Optional[str]
     language: str
+    mode: str
     model: str
     output_type: str
     pad_up_to_seconds: float
@@ -578,6 +579,7 @@ class Config:
         return cls(
             keyboard=args.keyboard,
             language=args.language,
+            mode=args.mode,
             model=args.model,
             output_type=args.output,
             pad_up_to_seconds=args.pad_up_to_seconds,
@@ -595,15 +597,21 @@ def create_argument_parser() -> argparse.ArgumentParser:
         help="Name of the keyboard to listen to (optional)"
     )
     parser.add_argument(
-        "--language", 
-        type=str, 
+        "--language",
+        type=str,
         default="en",
         help="Language code for Whisper transcription (default: en). Examples: en, pl, da, pt, zh, ja"
     )
     parser.add_argument(
-        "--model", 
-        choices=["whisper", "vosk"], 
-        default="whisper", 
+        "--mode",
+        choices=["mcp", "standalone"],
+        default="mcp",
+        help="Choose operating mode (default: mcp). Use 'standalone' to bypass MCP protocol and run directly"
+    )
+    parser.add_argument(
+        "--model",
+        choices=["whisper", "vosk"],
+        default="whisper",
         help="Choose speech-to-text transcription model (default: whisper)"
     )
     parser.add_argument(
@@ -657,14 +665,16 @@ def main() -> None:
     speech_to_text_service = SpeechToTextService(
         config, audio_recorder, keyboard_monitor, transcription_engine, output_handler
     )
-    
-    if sys.stdin.isatty():
+
+    if config.mode == "standalone":
         logger.info("Service Initialized in standalone mode")
         speech_to_text_service.start()
-    else:
+    elif config.mode == "mcp":
         logger.info("Service Initialized in MCP mode")
         mcp_server = MCPServer(speech_to_text_service)
         mcp_server.run()
+    else:
+        raise ValueError(f"Unknown mode: {config.mode}")
 
 
 if __name__ == "__main__":
