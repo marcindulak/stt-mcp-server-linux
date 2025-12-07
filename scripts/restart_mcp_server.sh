@@ -3,6 +3,7 @@
 set -Eeuo pipefail
 
 CONTAINER_NAME=${CONTAINER_NAME:-stt-mcp-server-linux}
+DEBUG=${DEBUG:-human}
 MODE=${MODE:-mcp}
 OUTPUT=${OUTPUT:-tmux}
 TMUX_SESSION=${TMUX_SESSION:-claude}
@@ -27,6 +28,7 @@ DOCKER_CMD="$DOCKER_CMD --volume $TMUX_TMPDIR:/.tmux"
 DOCKER_CMD="$DOCKER_CMD --volume $(pwd)/tests:/app/tests"
 DOCKER_CMD="$DOCKER_CMD stt-mcp-server-linux"
 DOCKER_CMD="$DOCKER_CMD /home/nonroot/venv/bin/python /app/stt_mcp_server_linux.py"
+DOCKER_CMD="$DOCKER_CMD --debug $DEBUG"
 DOCKER_CMD="$DOCKER_CMD --mode $MODE"
 DOCKER_CMD="$DOCKER_CMD --output $OUTPUT"
 DOCKER_CMD="$DOCKER_CMD --pad-up-to-seconds 30"

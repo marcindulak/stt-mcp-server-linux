@@ -19,15 +19,26 @@ KeyEventCallback = Callable[[], None]
 
 
 class JsonFormatter(logging.Formatter):
-    """Custom JSON log formatter for structured logging."""
-    
+    """Custom JSON log formatter for structured logging.
+
+    Args:
+        debug_mode: Controls traceback output.
+            - "off": no traceback included
+            - "json": traceback in JSON exception field (machine-parseable)
+            - "human": JSON line + traceback on separate lines (human-readable)
+    """
+
+    def __init__(self, debug_mode: str = "off") -> None:
+        super().__init__()
+        self.debug_mode = debug_mode
+
     def format(self, record: logging.LogRecord) -> str:
         log_obj = {
             "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat(),
             "level": record.levelname,
             "message": record.getMessage()
         }
-        
+
         if not hasattr(record, 'method'):
             frame = inspect.currentframe()
             while frame:
@@ -36,19 +47,44 @@ class JsonFormatter(logging.Formatter):
                     class_name = frame.f_locals['self'].__class__.__name__
                     log_obj["method"] = f"{class_name}.{frame.f_code.co_name}"
                     break
-            
-        return json.dumps(log_obj)
+
+        # Include exception traceback based on debug_mode
+        # Only include exception if record explicitly has exc_info set (from logger.exception() call)
+        formatted_exception = None
+        if self.debug_mode != "off" and record.exc_info:
+            try:
+                formatted_exception = self.formatException(record.exc_info)
+            except Exception as fmt_err:
+                formatted_exception = f"Failed to format exception: {fmt_err}"
+
+            if self.debug_mode == "json":
+                log_obj["exception"] = formatted_exception
+
+        result = json.dumps(log_obj)
+
+        # For human mode, append traceback on separate lines after JSON
+        if self.debug_mode == "human" and formatted_exception:
+            result += "\n" + formatted_exception
+
+        return result
 
 
-def create_logger(name: str, log_level: int = logging.INFO, use_stderr: bool = True) -> logging.Logger:
-    """Create and configure a logger with JSON formatting."""
+def create_logger(name: str = __name__, log_level: int = logging.INFO, use_stderr: bool = True, debug_mode: str = "off") -> logging.Logger:
+    """Create and configure a logger with JSON formatting.
+
+    Args:
+        name: Logger name.
+        log_level: Logging level.
+        use_stderr: If True, log to stderr; otherwise log to stdout.
+        debug_mode: Controls traceback output ("off", "json", "human").
+    """
     logger = logging.getLogger(name)
-    
+
     logger.handlers.clear()
     logger.setLevel(log_level)
     logger.propagate = False
 
-    log_format = JsonFormatter()
+    log_format = JsonFormatter(debug_mode=debug_mode)
     # MCP stdio server must not log to stdout
     # See https://modelcontextprotocol.io/docs/develop/build-server#logging-in-mcp-servers
     stream = sys.stderr if use_stderr else sys.stdout
@@ -64,9 +100,9 @@ class MCPServer:
     
     def __init__(self, speech_to_text_service: 'SpeechToTextService') -> None:
         self.speech_to_text_service = speech_to_text_service
-        self.logger = create_logger(__name__)
+        self.logger = logging.getLogger(__name__)
     
-    def send_response(self, response: Dict[str, Any], method_name: str = "") -> None:
+    def send_response(self, response: Dict[str, Any]) -> None:
         """Send JSON-RPC response to stdout."""
         json.dump(response, sys.stdout)
         sys.stdout.write('\n')
@@ -88,8 +124,8 @@ class MCPServer:
                 }
             }
         }
-        self.send_response(response, "handle_initialize")
-    
+        self.send_response(response)
+
     def handle_tools_list(self, request_id: Optional[str]) -> None:
         """Handle MCP tools/list request."""
         response = {
@@ -109,8 +145,8 @@ class MCPServer:
                 ]
             }
         }
-        self.send_response(response, "handle_tools_list")
-    
+        self.send_response(response)
+
     def handle_tools_call(self, request_id: Optional[str], params: Dict[str, Any]) -> None:
         """Handle MCP tools/call request."""
         tool_name = params.get("name")
@@ -128,7 +164,7 @@ class MCPServer:
                     "isError": False
                 }
             }
-            self.send_response(response, "handle_tools_call")
+            self.send_response(response)
         else:
             response = {
                 "jsonrpc": "2.0",
@@ -138,33 +174,41 @@ class MCPServer:
                     "message": f"Unknown tool: {tool_name}"
                 }
             }
-            self.send_response(response, "handle_tools_call")
+            self.send_response(response)
     
     def handle_request(self, request: Dict[str, Any]) -> None:
         """Handle incoming JSON-RPC request."""
         method = request.get("method")
         request_id = request.get("id")
         self.logger.info(f"Received MCP request: {method}")
-        
+
+        # Handle known methods
         if method == "initialize":
             self.handle_initialize(request_id)
         elif method == "notifications/initialized":
             self.logger.info("MCP client initialized")
+        elif method == "notifications/cancelled":
+            self.logger.info("MCP request cancelled by client")
         elif method == "tools/list":
             self.handle_tools_list(request_id)
         elif method == "tools/call":
             params = request.get("params", {})
             self.handle_tools_call(request_id, params)
         else:
-            response = {
-                "jsonrpc": "2.0",
-                "id": request_id,
-                "error": {
-                    "code": -32601,
-                    "message": f"Unknown method: {method}"
+            # Per JSON-RPC 2.0 spec (https://www.jsonrpc.org/specification):
+            # "The Server MUST NOT reply to a Notification, including those that are within a batch request."
+            # Notifications are requests without an 'id' field (id: null).
+            # Only send error response for actual requests (with id), not notifications.
+            if request_id is not None:
+                response = {
+                    "jsonrpc": "2.0",
+                    "id": request_id,
+                    "error": {
+                        "code": -32601,
+                        "message": f"Unknown method: {method}"
+                    }
                 }
-            }
-            self.send_response(response, "handle_request")
+                self.send_response(response)
     
     def run(self) -> None:
         """Main MCP server loop."""
@@ -176,7 +220,7 @@ class MCPServer:
             except json.JSONDecodeError:
                 continue
             except Exception as e:
-                self.logger.error(f"Error: {e}")
+                self.logger.exception(f"Error handling request: {e}")
 
 
 class AudioRecorder:
@@ -186,7 +230,7 @@ class AudioRecorder:
         self.audio_queue: queue.Queue[bytes] = queue.Queue()
         self.recording_active = False
         self.audio_stream: Optional[sounddevice.RawInputStream] = None
-        self.logger = create_logger(__name__)
+        self.logger = logging.getLogger(__name__)
     
     def audio_callback(self, indata: Any, frames: int, time: Any, status: Any) -> None:
         """Callback for audio stream data."""
@@ -208,7 +252,7 @@ class AudioRecorder:
             self.recording_active = True
             self.logger.info("Audio recording started successfully")
         except (OSError, sounddevice.PortAudioError) as e:
-            self.logger.error(f"Failed to start audio recording: {e}")
+            self.logger.exception(f"Failed to start audio recording: {e}")
             self._cleanup_failed_stream()
             self.recording_active = False
             raise
@@ -220,7 +264,7 @@ class AudioRecorder:
             return b""
         
         if not self.audio_stream:
-            self.logger.error("Audio stream is None but recording is active - inconsistent state")
+            self.logger.exception("Audio stream is None but recording is active - inconsistent state")
             self.recording_active = False
             return b""
         
@@ -242,7 +286,7 @@ class AudioRecorder:
             return audio_bytes
         
         except Exception as e:
-            self.logger.error(f"Error stopping audio recording: {e}")
+            self.logger.exception(f"Error stopping audio recording: {e}")
             self.recording_active = False
             return b""
     
@@ -258,7 +302,7 @@ class AudioRecorder:
             try:
                 self.audio_stream.close()
             except Exception as e:
-                self.logger.warning(f"Failed to close audio stream during error cleanup: {e}")
+                self.logger.exception(f"Failed to close audio stream during error cleanup: {e}")
             finally:
                 self.audio_stream = None
 
@@ -273,7 +317,7 @@ class AudioRecorder:
             self.recording_active = False
             self.logger.info("Audio resources cleaned up successfully")
         except Exception as e:
-            self.logger.error(f"Error during audio cleanup: {e}")
+            self.logger.exception(f"Error during audio cleanup: {e}")
 
 
 class TranscriptionEngine:
@@ -290,7 +334,7 @@ class WhisperEngine(TranscriptionEngine):
     def __init__(self, language: str = "en", pad_up_to_seconds: float = 0.0) -> None:
         self.language = language
         self.pad_up_to_seconds = pad_up_to_seconds
-        self.logger = create_logger(__name__)
+        self.logger = logging.getLogger(__name__)
         self.logger.info(f"Loading Whisper model with language: {language}")
         import whisper  # type: ignore[import-untyped]
         self.model = whisper.load_model("tiny")
@@ -326,7 +370,7 @@ class VoskEngine(TranscriptionEngine):
     """Vosk-based transcription engine."""
     
     def __init__(self) -> None:
-        self.logger = create_logger(__name__)
+        self.logger = logging.getLogger(__name__)
         self.logger.info("Loading Vosk model")
         import vosk  # type: ignore[import-untyped]
         self.model = vosk.Model("/vosk")
@@ -375,7 +419,7 @@ class TmuxOutputHandler(OutputHandler):
     
     def __init__(self, session_name: str) -> None:
         self.session_name = self._validate_session_name(session_name)
-        self.logger = create_logger(__name__)
+        self.logger = logging.getLogger(__name__)
     
     def _validate_session_name(self, session_name: str) -> str:
         """Validate tmux session name against injection attacks."""
@@ -423,16 +467,23 @@ class TmuxOutputHandler(OutputHandler):
             sanitized_session = self._sanitize_text(self.session_name)
             
             if not sanitized_text:
-                self.logger.warning("Empty or entirely filtered transcription text, skipping")
+                self.logger.info("Empty or entirely filtered transcription text, skipping")
                 return
-                
+
             if sanitized_text != text:
-                self.logger.warning(f"Sanitized transcription text from '{text}' to '{sanitized_text}'")
+                self.logger.info(f"Sanitized transcription text from '{text}' to '{sanitized_text}'")
             
-            subprocess.run(["tmux", "send-keys", "-t", sanitized_session, sanitized_text])
+            result = subprocess.run(
+                ["tmux", "send-keys", "-t", sanitized_session, sanitized_text],
+                capture_output=True,
+                text=True
+            )
+            if result.returncode != 0:
+                self.logger.exception(f"tmux send-keys failed with code {result.returncode}: {result.stderr}")
+                return
             self.logger.info(f"Sent transcription to tmux session '{self.session_name}': {sanitized_text}")
         except Exception as e:
-            self.logger.error(f"Error sending transcription to tmux session '{self.session_name}': {e}")
+            self.logger.exception(f"Error sending transcription to tmux session '{self.session_name}': {e}")
 
 
 class StdoutOutputHandler(OutputHandler):
@@ -448,7 +499,7 @@ class KeyboardMonitor:
     
     def __init__(self, keyboard_name: Optional[str] = None) -> None:
         self.keyboard_name = keyboard_name
-        self.logger = create_logger(__name__)
+        self.logger = logging.getLogger(__name__)
     
     async def find_keyboards(self) -> List[evdev.InputDevice]:
         """Find keyboard input devices matching the configured name."""
@@ -464,8 +515,8 @@ class KeyboardMonitor:
                     if self.keyboard_name is None or self.keyboard_name.lower() == device.name.lower():
                         self.logger.info(f"Found matching keyboard: {device.name} ({dev_path})")
                         keyboards.append(device)
-            except Exception:
-                pass
+            except Exception as e:
+                self.logger.debug(f"Could not access device {dev_path}: {e}")
         
         if not keyboards and self.keyboard_name:
             available_list = ", ".join(available_keyboards) if available_keyboards else "none"
@@ -501,7 +552,7 @@ class KeyboardMonitor:
                             self.logger.info("Right Ctrl key released")
                             on_key_release()
         except Exception as e:
-            self.logger.error(f"Error monitoring device {dev_path}: {e}")
+            self.logger.exception(f"Error monitoring device {dev_path}: {e}")
     
     async def start_monitoring(self, on_key_press: KeyEventCallback, on_key_release: KeyEventCallback) -> None:
         """Start monitoring all matching keyboards."""
@@ -524,7 +575,7 @@ class SpeechToTextService:
                  transcription_engine: TranscriptionEngine,
                  output_handler: OutputHandler) -> None:
         self.config = config
-        self.logger = create_logger(__name__)
+        self.logger = logging.getLogger(__name__)
         
         self.audio_recorder = audio_recorder
         self.keyboard_monitor = keyboard_monitor
@@ -546,9 +597,9 @@ class SpeechToTextService:
                 self.logger.info(f"Sending transcribed text to output handler")
                 self.output_handler.send_text(text)
             else:
-                self.logger.warning("Transcription returned empty text")
+                self.logger.info("Transcription returned empty text")
         else:
-            self.logger.warning("No audio data captured")
+            self.logger.info("No audio data captured")
     
     def start(self) -> None:
         """Start the speech-to-text service."""
@@ -566,6 +617,7 @@ class SpeechToTextService:
 @dataclass(frozen=True)
 class Config:
     """Configuration container for the application."""
+    debug: str
     keyboard: Optional[str]
     language: str
     mode: str
@@ -577,6 +629,7 @@ class Config:
     @classmethod
     def from_args(cls, args: argparse.Namespace) -> 'Config':
         return cls(
+            debug=args.debug,
             keyboard=args.keyboard,
             language=args.language,
             mode=args.mode,
@@ -632,6 +685,12 @@ def create_argument_parser() -> argparse.ArgumentParser:
         default="claude",
         help="Tmux session name (default: claude)"
     )
+    parser.add_argument(
+        "--debug",
+        choices=["off", "json", "human"],
+        default="off",
+        help="Debug mode for exception tracebacks (default: off). Use 'json' for machine-parseable or 'human' for human-readable"
+    )
 
     return parser
 
@@ -641,40 +700,46 @@ def main() -> None:
     parser = create_argument_parser()
     args = parser.parse_args()
     config = Config.from_args(args)
-    logger = create_logger(__name__)
-    
-    audio_recorder = AudioRecorder()
-    keyboard_monitor = KeyboardMonitor(config.keyboard)
-    
-    transcription_engine: TranscriptionEngine
-    if config.model == "whisper":
-        transcription_engine = WhisperEngine(config.language, config.pad_up_to_seconds)
-    elif config.model == "vosk":
-        if config.pad_up_to_seconds > 0.0:
-            logger.warning("--pad-up-to-seconds option is ignored for Vosk model")
-        transcription_engine = VoskEngine()
-    else:
-        raise ValueError(f"Unknown transcription model: {config.model}")
-    
-    output_handler: OutputHandler
-    if config.output_type == "tmux":
-        output_handler = TmuxOutputHandler(config.session)
-    else:
-        output_handler = StdoutOutputHandler()
-    
-    speech_to_text_service = SpeechToTextService(
-        config, audio_recorder, keyboard_monitor, transcription_engine, output_handler
-    )
 
-    if config.mode == "standalone":
-        logger.info("Service Initialized in standalone mode")
-        speech_to_text_service.start()
-    elif config.mode == "mcp":
-        logger.info("Service Initialized in MCP mode")
-        mcp_server = MCPServer(speech_to_text_service)
-        mcp_server.run()
-    else:
-        raise ValueError(f"Unknown mode: {config.mode}")
+    # Configure logging for all modules before creating any components
+    create_logger(debug_mode=config.debug)
+    logger = logging.getLogger(__name__)
+
+    try:
+        audio_recorder = AudioRecorder()
+        keyboard_monitor = KeyboardMonitor(config.keyboard)
+
+        transcription_engine: TranscriptionEngine
+        if config.model == "whisper":
+            transcription_engine = WhisperEngine(config.language, config.pad_up_to_seconds)
+        elif config.model == "vosk":
+            if config.pad_up_to_seconds > 0.0:
+                logger.info("--pad-up-to-seconds option is ignored for Vosk model")
+            transcription_engine = VoskEngine()
+        else:
+            raise ValueError(f"Unknown transcription model: {config.model}")
+
+        output_handler: OutputHandler
+        if config.output_type == "tmux":
+            output_handler = TmuxOutputHandler(config.session)
+        else:
+            output_handler = StdoutOutputHandler()
+
+        speech_to_text_service = SpeechToTextService(
+            config, audio_recorder, keyboard_monitor, transcription_engine, output_handler
+        )
+
+        if config.mode == "standalone":
+            logger.info("Service Initialized in standalone mode")
+            speech_to_text_service.start()
+        elif config.mode == "mcp":
+            logger.info("Service Initialized in MCP mode")
+            mcp_server = MCPServer(speech_to_text_service)
+            mcp_server.run()
+        else:
+            raise ValueError(f"Unknown mode: {config.mode}")
+    except Exception as e:
+        logger.exception(f"Application error: {e}")
 
 
 if __name__ == "__main__":

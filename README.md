@@ -139,7 +139,7 @@ The speech-to-text transcription can be performed without the MCP protocol.
 8. Start the transcription service in standalone mode:
 
    ```
-   MODE=standalone OUTPUT=tmux TMUX_SESSION=bash bash scripts/restart_mcp_server.sh
+   DEBUG=human MODE=standalone OUTPUT=tmux TMUX_SESSION=bash bash scripts/restart_mcp_server.sh
    ```
 
    Press the `Right Ctrl` key to activate `Push-to-Talk` functionality.

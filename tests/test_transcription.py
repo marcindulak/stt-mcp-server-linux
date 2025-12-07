@@ -3,7 +3,7 @@ import os
 from unittest.mock import patch
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from stt_mcp_server_linux import AudioRecorder, SpeechToTextService
+from stt_mcp_server_linux import AudioRecorder, Config, SpeechToTextService
 
 
 class TestAudioRecording:
@@ -34,45 +34,51 @@ class TestTranscriptionWorkflow:
     
     def test_key_press_starts_recording(self):
         """Test that key press starts recording."""
-        class MockConfig:
-            keyboard = None
-            language = "en"
-            model = "whisper"
-            output_type = "stdout"
-            session = "test"
-        
+        config = Config(
+            debug="off",
+            keyboard=None,
+            language="en",
+            mode="standalone",
+            model="whisper",
+            output_type="stdout",
+            pad_up_to_seconds=0.0,
+            session="test"
+        )
+
         with patch('stt_mcp_server_linux.AudioRecorder') as mock_audio:
             with patch('stt_mcp_server_linux.KeyboardMonitor') as mock_keyboard:
                 with patch('stt_mcp_server_linux.WhisperEngine') as mock_whisper:
                     with patch('stt_mcp_server_linux.StdoutOutputHandler') as mock_output:
-                        config = MockConfig()
                         audio_recorder = mock_audio.return_value
                         keyboard_monitor = mock_keyboard.return_value
                         transcription_engine = mock_whisper.return_value
                         output_handler = mock_output.return_value
-                        
+
                         service = SpeechToTextService(
-                            config, audio_recorder, keyboard_monitor, 
+                            config, audio_recorder, keyboard_monitor,
                             transcription_engine, output_handler
                         )
-                        
+
                         service.on_key_press()
                         audio_recorder.start_recording.assert_called_once()
-    
+
     def test_key_release_processes_audio(self):
         """Test that key release processes audio data."""
-        class MockConfig:
-            keyboard = None
-            language = "en"
-            model = "whisper"
-            output_type = "stdout"
-            session = "test"
-        
+        config = Config(
+            debug="off",
+            keyboard=None,
+            language="en",
+            mode="standalone",
+            model="whisper",
+            output_type="stdout",
+            pad_up_to_seconds=0.0,
+            session="test"
+        )
+
         with patch('stt_mcp_server_linux.AudioRecorder') as mock_audio:
             with patch('stt_mcp_server_linux.KeyboardMonitor') as mock_keyboard:
                 with patch('stt_mcp_server_linux.WhisperEngine') as mock_whisper:
                     with patch('stt_mcp_server_linux.StdoutOutputHandler') as mock_output:
-                        config = MockConfig()
                         audio_recorder = mock_audio.return_value
                         keyboard_monitor = mock_keyboard.return_value
                         transcription_engine = mock_whisper.return_value
