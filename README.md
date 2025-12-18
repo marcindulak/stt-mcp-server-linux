@@ -114,7 +114,7 @@ The tool sends the transcribed text into the Tmux session's input buffer.
    Press the `Right Ctrl` key to activate `Push-to-Talk` functionality.
    Release the key to perform the transcription and inject the resulting text into Claude.
 
-> [!WARNING]
+> [!NOTE]
 > Give the MCP server some time to initialize.
 > You may need to explicitly verify its status with the `/mcp` command.
 >
@@ -122,9 +122,10 @@ The tool sends the transcribed text into the Tmux session's input buffer.
 >
 > Once a `{... "message": "Waiting for Right Ctrl key press on ... keyboard ..."}` log line appears the transcription feature should be available.
 >
-> In Claude, press `esc to interrupt` and the `transcribe` tool will continue running in the background.
+> The `transcribe` tool returns immediately and runs in the background.
+> Claude Code's terminal remains responsive for your input and commands while keyboard monitoring continues.
 >
-> There seem to be no way to stop the MCP server transcribe tool, other than to `/quit` Claude.
+> To stop the transcription service, use `/quit` or close Claude Code.
 
 ## Standalone mode (without MCP)
 
@@ -180,7 +181,7 @@ bash scripts/test_mypy.sh
 
 The system uses object composition with separated responsibilities across multiple classes:
 
-1. **MCPServer**: Handles JSON-RPC protocol communication with Claude. Manages tool registration and request routing.
+1. **MCPServer**: Handles JSON-RPC protocol communication with Claude using async/await. Manages an event loop that keeps the server responsive while background tasks execute. Routes MCP requests and schedules the speech-to-text service as background asyncio tasks.
 
 2. **AudioRecorder**: Manages audio stream capture and buffering. Provides start/stop interface for recording sessions.
 
@@ -188,9 +189,9 @@ The system uses object composition with separated responsibilities across multip
 
 4. **OutputHandler**: Abstract base with concrete implementations (TmuxOutputHandler, StdoutOutputHandler) for different output destinations.
 
-5. **KeyboardMonitor**: Handles keyboard device detection and Right Ctrl key event monitoring using evdev.
+5. **KeyboardMonitor**: Handles keyboard device detection and Right Ctrl key event monitoring using evdev. Runs as an async coroutine allowing non-blocking keyboard monitoring.
 
-6. **SpeechToTextService**: Main coordinator that orchestrates all components. Handles the transcription workflow.
+6. **SpeechToTextService**: Main coordinator that orchestrates all components. Provides `start_async()` for MCP mode (background execution) and `start()` for standalone mode (blocking execution).
 
 # Abandoned ideas
 

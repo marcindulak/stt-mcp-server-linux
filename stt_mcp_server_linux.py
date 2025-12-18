@@ -97,10 +97,11 @@ def create_logger(name: str = __name__, log_level: int = logging.INFO, use_stder
 
 class MCPServer:
     """MCP server implementation for speech-to-text functionality."""
-    
+
     def __init__(self, speech_to_text_service: 'SpeechToTextService') -> None:
         self.speech_to_text_service = speech_to_text_service
         self.logger = logging.getLogger(__name__)
+        self.background_tasks: List[asyncio.Task[Any]] = []
     
     def send_response(self, response: Dict[str, Any]) -> None:
         """Send JSON-RPC response to stdout."""
@@ -151,11 +152,15 @@ class MCPServer:
         """Handle MCP tools/call request."""
         tool_name = params.get("name")
         self.logger.info(f"Handling tool call: {tool_name}")
-        
+
         if tool_name == "transcribe":
-            self.logger.info("Starting speech-to-text service")
-            self.speech_to_text_service.start()
-            
+            self.logger.info("Scheduling speech-to-text service to run in background")
+            # Remove completed tasks to prevent unbounded list growth
+            self.background_tasks = [t for t in self.background_tasks if not t.done()]
+            loop = asyncio.get_running_loop()
+            task = loop.create_task(self.speech_to_text_service.start_async())
+            self.background_tasks.append(task)
+
             response = {
                 "jsonrpc": "2.0",
                 "id": request_id,
@@ -210,17 +215,33 @@ class MCPServer:
                 }
                 self.send_response(response)
     
-    def run(self) -> None:
+    async def run(self) -> None:
         """Main MCP server loop."""
         self.logger.info("Service Initialized in MCP mode")
-        for line in sys.stdin:
-            try:
-                request = json.loads(line.strip())
-                self.handle_request(request)
-            except json.JSONDecodeError:
-                continue
-            except Exception as e:
-                self.logger.exception(f"Error handling request: {e}")
+        loop = asyncio.get_event_loop()
+
+        try:
+            while True:
+                # Read stdin in executor to avoid blocking the event loop
+                line = await loop.run_in_executor(None, sys.stdin.readline)
+                if not line:
+                    break
+                try:
+                    request = json.loads(line.strip())
+                    self.handle_request(request)
+                except json.JSONDecodeError:
+                    continue
+                except Exception as e:
+                    self.logger.exception(f"Error handling request: {e}")
+        finally:
+            # Clean up background tasks
+            for task in self.background_tasks:
+                if not task.done():
+                    task.cancel()
+                    try:
+                        await task
+                    except asyncio.CancelledError:
+                        pass
 
 
 class AudioRecorder:
@@ -601,13 +622,25 @@ class SpeechToTextService:
         else:
             self.logger.info("No audio data captured")
     
+    async def start_async(self) -> None:
+        """Start the speech-to-text service as an async coroutine (for MCP mode)."""
+        self.logger.info("Starting speech-to-text functionality in async mode")
+
+        try:
+            await self.keyboard_monitor.start_monitoring(
+                self.on_key_press,
+                self.on_key_release
+            )
+        finally:
+            self.audio_recorder.cleanup()
+
     def start(self) -> None:
-        """Start the speech-to-text service."""
+        """Start the speech-to-text service (for standalone mode)."""
         self.logger.info("Starting speech-to-text functionality")
-        
+
         try:
             asyncio.run(self.keyboard_monitor.start_monitoring(
-                self.on_key_press, 
+                self.on_key_press,
                 self.on_key_release
             ))
         finally:
@@ -733,9 +766,8 @@ def main() -> None:
             logger.info("Service Initialized in standalone mode")
             speech_to_text_service.start()
         elif config.mode == "mcp":
-            logger.info("Service Initialized in MCP mode")
             mcp_server = MCPServer(speech_to_text_service)
-            mcp_server.run()
+            asyncio.run(mcp_server.run())
         else:
             raise ValueError(f"Unknown mode: {config.mode}")
     except Exception as e:
