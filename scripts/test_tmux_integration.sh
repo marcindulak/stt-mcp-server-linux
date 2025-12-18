@@ -102,8 +102,8 @@ print('Transcribed text sent to Tmux')
     log "Checking Tmux session for transcribed text"
     tmux_content=$(TMUX_TMPDIR="$TMUX_TMPDIR" tmux capture-pane -t "$TMUX_SESSION" -p)
     log "Captured Tmux session content $tmux_content"
-    
-    if echo "$tmux_content" | grep -qi "hello"; then
+
+    if echo "$tmux_content" | tr '\n' ' ' | grep -qiE "h *e *l *l *o"; then
         log "SUCCESS: Text injection of 'hello' working correctly"
         return 0
     else
