@@ -208,3 +208,10 @@ Attempted using xdotool for keyboard simulation on X11. Abandoned because:
 ## Direct MCP text injection
 Investigated injecting text directly through MCP protocol. Abandoned because:
 - It seems that MCP tools can only return content to Claude (as output), not inject into input stream
+
+## Hot-swapping audio devices (microphones) without container restart
+Attempted to support switching between microphones without restarting the container. Abandoned because:
+- Docker's `--device` flag captures a snapshot of `/dev/snd` at container startup. Subsequently selected or hot-plugged audio devices are not visible inside the container.
+- Bind mounting the entire `/dev` directory (`-v /dev:/dev`) to enable real-time device visibility is a security risk.
+- This is a known Docker limitation documented in [moby/moby#39262](https://github.com/moby/moby/issues/39262).
+- Workaround: Restart the container when switching microphones.
