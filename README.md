@@ -1,7 +1,5 @@
 [![test](https://github.com/marcindulak/stt-mcp-server-linux/actions/workflows/test.yml/badge.svg)](https://github.com/marcindulak/stt-mcp-server-linux/actions/workflows/test.yml)
 
-[![Mentioned in Awesome Claude Code](https://awesome.re/mentioned-badge.svg)](https://github.com/hesreallyhim/awesome-claude-code)
-
 > Co-Authored-By: Claude
 
 # Functionality overview
