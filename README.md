@@ -87,7 +87,7 @@ The tool sends the transcribed text into the Tmux session's input buffer.
    Verify the Claude connection to the MCP server with:
 
    ```
-   claude mcp list --debug
+   claude mcp list
    ```
 
    Expected output:
