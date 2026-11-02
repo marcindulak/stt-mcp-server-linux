@@ -5,11 +5,16 @@ RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-ins
     libasound2-dev \
     portaudio19-dev \
     procps \
-    tmux \
     python3 \
     python3-pip \
     python3-venv \
     udev
+
+# default tmux 3.5a client from trixie is dropped by host tmux servers 3.6 to 3.8,
+# while clients 3.6 to 3.8 work with every server tried (3.4 to 3.8).
+RUN echo "deb http://deb.debian.org/debian trixie-backports main" > /etc/apt/sources.list.d/trixie-backports.list \
+    && apt-get update \
+    && DEBIAN_FRONTEND=noninteractive apt-get install --yes --no-install-recommends --target-release trixie-backports tmux
 
 # Install vosk dependencies
 RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
