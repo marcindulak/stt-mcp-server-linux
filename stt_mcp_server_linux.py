@@ -500,7 +500,14 @@ class TmuxOutputHandler(OutputHandler):
                 text=True
             )
             if result.returncode != 0:
-                self.logger.exception(f"tmux send-keys failed with code {result.returncode}: {result.stderr}")
+                # Clients 3.5a and older are dropped by servers 3.6 to 3.8 with
+                # "server exited unexpectedly", so the message names the client version.
+                client_version = subprocess.run(["tmux", "-V"], capture_output=True, text=True).stdout.strip()
+                self.logger.error(
+                    f"tmux send-keys failed with code {result.returncode}: {result.stderr.strip()} "
+                    f"(container {client_version}). This can mean the container's tmux is older than "
+                    f"the host's tmux server, compare with 'tmux -V' on the host."
+                )
                 return
             self.logger.info(f"Sent transcription to tmux session '{self.session_name}': {sanitized_text}")
         except Exception as e:
