@@ -1,5 +1,8 @@
 FROM debian:trixie-slim
 
+ARG PIP_UPLOADED_PRIOR_TO=P7D
+ENV PIP_UPLOADED_PRIOR_TO=${PIP_UPLOADED_PRIOR_TO}
+
 # Install base dependencies
 RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
     libasound2-dev \
